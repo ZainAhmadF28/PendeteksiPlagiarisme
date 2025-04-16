@@ -5,10 +5,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.corpus import stopwords
 
-# Muat model bahasa spaCy
-nlp = spacy.load("xx_ent_wiki_sm")
-
-# Menambahkan sentencizer ke pipeline spaCy dengan nama string
+# Menggunakan blank model spaCy (lebih ringan dan tanpa perlu download)
+nlp = spacy.blank("xx")  # Model kosong multibahasa
 if "sentencizer" not in nlp.pipe_names:
     nlp.add_pipe("sentencizer")
 
@@ -40,8 +38,8 @@ def sent_tokenize_spacy(text):
 
 # Highlight bagian mirip
 def highlight_similar_sentences(text_input, reference_text, threshold=0.8):
-    sentences_input = sent_tokenize_spacy(text_input)  # Menggunakan spaCy untuk tokenisasi kalimat
-    sentences_ref = sent_tokenize_spacy(reference_text)  # Menggunakan spaCy untuk tokenisasi kalimat
+    sentences_input = sent_tokenize_spacy(text_input)
+    sentences_ref = sent_tokenize_spacy(reference_text)
 
     highlighted_sentences = []
     tfidf = TfidfVectorizer(stop_words=stopwords.words('indonesian'))
@@ -105,7 +103,6 @@ if st.button('🔍 Mulai Deteksi Plagiarisme'):
                 st.markdown(s)
         else:
             st.info("Tidak ada bagian yang sangat mirip ditemukan berdasarkan threshold.")
-
     else:
         st.warning("Mohon masukkan teks dan referensi yang valid.")
 
