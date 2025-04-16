@@ -1,14 +1,18 @@
 import streamlit as st
 import PyPDF2
-import nltk
+import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.corpus import stopwords
 
-# Pastikan Anda telah mengunduh stopwords dari nltk
-nltk.download('stopwords')
+# Muat model bahasa spaCy
+nlp = spacy.load("xx_ent_wiki_sm")
 
-# Fungsi untuk mengekstrak teks dari PDF
+# Menambahkan sentencizer ke pipeline spaCy dengan nama string
+if "sentencizer" not in nlp.pipe_names:
+    nlp.add_pipe("sentencizer")
+
+# Fungsi ekstraksi PDF
 def extract_text_from_pdf(uploaded_file):
     pdf_reader = PyPDF2.PdfReader(uploaded_file)
     text = ""
@@ -16,121 +20,95 @@ def extract_text_from_pdf(uploaded_file):
         text += page.extract_text() or ""
     return text
 
-# Fungsi untuk membaca teks dari file txt
+# Fungsi ekstraksi dari txt
 def extract_text_from_txt(uploaded_file):
     text = uploaded_file.read().decode("utf-8")
     return text
 
-# Fungsi untuk menghitung cosine similarity antara dua teks
+# Fungsi cosine similarity
 def calculate_cosine_similarity(text1, text2):
-    # Stopwords untuk bahasa Indonesia
     stopwords_indonesia = stopwords.words('indonesian')
-    
-    # Menggunakan TfidfVectorizer untuk memroses teks
     tfidf = TfidfVectorizer(stop_words=stopwords_indonesia)
     tfidf_matrix = tfidf.fit_transform([text1, text2])
-    
-    # Menghitung cosine similarity antara kedua teks
     similarity_matrix = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])
-    
     return similarity_matrix[0][0]
 
-# Header
+# Tokenisasi kalimat menggunakan spaCy
+def sent_tokenize_spacy(text):
+    doc = nlp(text)
+    return [sent.text for sent in doc.sents]
+
+# Highlight bagian mirip
+def highlight_similar_sentences(text_input, reference_text, threshold=0.8):
+    sentences_input = sent_tokenize_spacy(text_input)  # Menggunakan spaCy untuk tokenisasi kalimat
+    sentences_ref = sent_tokenize_spacy(reference_text)  # Menggunakan spaCy untuk tokenisasi kalimat
+
+    highlighted_sentences = []
+    tfidf = TfidfVectorizer(stop_words=stopwords.words('indonesian'))
+
+    for sentence in sentences_input:
+        sims = []
+        for ref in sentences_ref:
+            tfidf_matrix = tfidf.fit_transform([sentence, ref])
+            sim_score = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+            sims.append(sim_score)
+        max_sim = max(sims)
+        if max_sim >= threshold:
+            highlighted_sentences.append(f"🔸 **{sentence}** (Similarity: {max_sim:.2f})")
+
+    return highlighted_sentences
+
+# UI Streamlit
 st.title("Aplikasi Deteksi Plagiarisme")
-st.subheader("Deteksi Plagiarisme dengan mudah menggunakan file teks atau PDF")
+st.subheader("Deteksi Plagiarisme dan Lihat Bagian yang Mirip 🔍")
 
-# Sidebar untuk pilihan
 st.sidebar.header("Pengaturan")
-file_type = st.sidebar.selectbox(
-    "Pilih Tipe File untuk Diuji:",
-    ("Teks", "PDF")
-)
+file_type = st.sidebar.selectbox("Pilih Tipe File untuk Diuji:", ("Teks", "PDF"))
+reference_file_type = st.sidebar.selectbox("Pilih Tipe File Referensi:", ("Teks", "PDF"))
 
-# Input Referensi Sumber
-reference_file_type = st.sidebar.selectbox(
-    "Pilih Tipe File Referensi Sumber:",
-    ("Teks", "PDF")
-)
-
-# Input Teks atau Upload File untuk Referensi Sumber
+# Input referensi
+reference_text = ""
+reference_uploaded_file = None
 if reference_file_type == "Teks":
-    st.write("Masukkan teks referensi sumber:")
-    reference_text = st.text_area("Masukkan Teks Referensi")
+    reference_text = st.text_area("Masukkan Teks Referensi:")
 elif reference_file_type == "PDF":
-    st.write("Unggah file PDF sebagai referensi sumber:")
-    reference_uploaded_file = st.file_uploader("Pilih PDF Referensi", type="pdf")
+    reference_uploaded_file = st.file_uploader("Unggah PDF Referensi", type="pdf")
 
-# Input Teks atau Upload File untuk Diuji
+# Input dokumen uji
+text_input = ""
+uploaded_file = None
 if file_type == "Teks":
-    st.write("Masukkan teks yang akan diuji plagiarisme:")
-    text_input = st.text_area("Masukkan Teks")
+    text_input = st.text_area("Masukkan Teks yang Akan Diuji:")
 elif file_type == "PDF":
-    st.write("Unggah file PDF yang ingin diuji plagiarisme:")
-    uploaded_file = st.file_uploader("Pilih PDF untuk Diuji", type="pdf")
+    uploaded_file = st.file_uploader("Unggah PDF untuk Diuji", type="pdf")
 
-# Tombol untuk Memulai Deteksi
-if st.button('Mulai Deteksi Plagiarisme'):
-    if reference_file_type == "Teks" and reference_text and file_type == "Teks" and text_input:
-        st.write("Memulai deteksi plagiarisme pada teks...")
-        # Hitung similarity
+# Tombol deteksi
+if st.button('🔍 Mulai Deteksi Plagiarisme'):
+    if reference_file_type == "PDF" and reference_uploaded_file:
+        reference_text = extract_text_from_pdf(reference_uploaded_file)
+    if file_type == "PDF" and uploaded_file:
+        text_input = extract_text_from_pdf(uploaded_file)
+
+    if text_input and reference_text:
         similarity_score = calculate_cosine_similarity(text_input, reference_text)
-        
-        # Menampilkan hasil
+        st.subheader(f"📊 Skor Kemiripan: {similarity_score:.2f}")
         if similarity_score > 0.8:
-            st.warning(f"Teks sangat mirip dengan referensi! Similarity score: {similarity_score:.2f}")
+            st.warning("⚠️ Teks sangat mirip dengan referensi!")
         else:
-            st.success(f"Teks tidak terlalu mirip dengan referensi. Similarity score: {similarity_score:.2f}")
-    
-    elif reference_file_type == "PDF" and reference_uploaded_file and file_type == "Teks" and text_input:
-        st.write("Memulai deteksi plagiarisme pada file PDF referensi dan teks...")
-        
-        # Ekstrak teks dari file PDF referensi
-        reference_pdf_text = extract_text_from_pdf(reference_uploaded_file)
-        
-        # Hitung similarity
-        similarity_score = calculate_cosine_similarity(text_input, reference_pdf_text)
-        
-        # Menampilkan hasil
-        if similarity_score > 0.8:
-            st.warning(f"Teks sangat mirip dengan referensi! Similarity score: {similarity_score:.2f}")
-        else:
-            st.success(f"Teks tidak terlalu mirip dengan referensi. Similarity score: {similarity_score:.2f}")
-    
-    elif reference_file_type == "Teks" and reference_text and file_type == "PDF" and uploaded_file:
-        st.write("Memulai deteksi plagiarisme pada file PDF referensi dan file PDF yang diunggah...")
-        
-        # Ekstrak teks dari file PDF referensi dan file PDF yang diunggah
-        reference_pdf_text = extract_text_from_pdf(reference_uploaded_file)
-        uploaded_pdf_text = extract_text_from_pdf(uploaded_file)
-        
-        # Hitung similarity
-        similarity_score = calculate_cosine_similarity(uploaded_pdf_text, reference_pdf_text)
-        
-        # Menampilkan hasil
-        if similarity_score > 0.8:
-            st.warning(f"Teks dalam PDF sangat mirip dengan referensi! Similarity score: {similarity_score:.2f}")
-        else:
-            st.success(f"Teks dalam PDF tidak terlalu mirip dengan referensi. Similarity score: {similarity_score:.2f}")
-    
-    elif reference_file_type == "PDF" and reference_uploaded_file and file_type == "PDF" and uploaded_file:
-        st.write("Memulai deteksi plagiarisme pada kedua file PDF...")
-        
-        # Ekstrak teks dari kedua file PDF
-        reference_pdf_text = extract_text_from_pdf(reference_uploaded_file)
-        uploaded_pdf_text = extract_text_from_pdf(uploaded_file)
-        
-        # Hitung similarity
-        similarity_score = calculate_cosine_similarity(uploaded_pdf_text, reference_pdf_text)
-        
-        # Menampilkan hasil
-        if similarity_score > 0.8:
-            st.warning(f"File PDF sangat mirip dengan referensi! Similarity score: {similarity_score:.2f}")
-        else:
-            st.success(f"File PDF tidak terlalu mirip dengan referensi. Similarity score: {similarity_score:.2f}")
-    
-    else:
-        st.warning("Silakan masukkan teks referensi atau unggah file PDF terlebih dahulu.")
+            st.success("✅ Teks tidak terlalu mirip dengan referensi.")
 
-# Menampilkan footer atau catatan
-st.markdown("### Tentang Aplikasi")
-st.write("Aplikasi ini memungkinkan deteksi plagiarisme menggunakan teks atau PDF dengan berbagai metode perbandingan teks.")
+        # Highlight bagian yang mirip
+        st.markdown("### ✨ Bagian yang Mirip:")
+        similar_sentences = highlight_similar_sentences(text_input, reference_text)
+        if similar_sentences:
+            for s in similar_sentences:
+                st.markdown(s)
+        else:
+            st.info("Tidak ada bagian yang sangat mirip ditemukan berdasarkan threshold.")
+
+    else:
+        st.warning("Mohon masukkan teks dan referensi yang valid.")
+
+# Footer
+st.markdown("### ℹ️ Tentang Aplikasi")
+st.write("Aplikasi ini menggunakan cosine similarity dan TF-IDF untuk mendeteksi kemiripan dokumen dan menunjukkan bagian yang mirip antar teks.")
