@@ -1,19 +1,14 @@
 import streamlit as st
 import PyPDF2
-import spacy
+import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
 
-import spacy.cli
-spacy.cli.download("xx_ent_wiki_sm")  # tambahkan ini
-
-# Muat model bahasa spaCy
-nlp = spacy.load("xx_ent_wiki_sm")
-
-# Menambahkan sentencizer ke pipeline spaCy dengan nama string
-if "sentencizer" not in nlp.pipe_names:
-    nlp.add_pipe("sentencizer")
+# Pastikan untuk mengunduh punkt dari NLTK sekali saja
+nltk.download('punkt')
+nltk.download('stopwords')
 
 # Fungsi ekstraksi PDF
 def extract_text_from_pdf(uploaded_file):
@@ -36,15 +31,14 @@ def calculate_cosine_similarity(text1, text2):
     similarity_matrix = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])
     return similarity_matrix[0][0]
 
-# Tokenisasi kalimat menggunakan spaCy
-def sent_tokenize_spacy(text):
-    doc = nlp(text)
-    return [sent.text for sent in doc.sents]
+# Tokenisasi kalimat menggunakan NLTK
+def sent_tokenize_nltk(text):
+    return sent_tokenize(text)
 
 # Highlight bagian mirip
 def highlight_similar_sentences(text_input, reference_text, threshold=0.8):
-    sentences_input = sent_tokenize_spacy(text_input)  # Menggunakan spaCy untuk tokenisasi kalimat
-    sentences_ref = sent_tokenize_spacy(reference_text)  # Menggunakan spaCy untuk tokenisasi kalimat
+    sentences_input = sent_tokenize_nltk(text_input)  # Menggunakan NLTK untuk tokenisasi kalimat
+    sentences_ref = sent_tokenize_nltk(reference_text)  # Menggunakan NLTK untuk tokenisasi kalimat
 
     highlighted_sentences = []
     tfidf = TfidfVectorizer(stop_words=stopwords.words('indonesian'))
